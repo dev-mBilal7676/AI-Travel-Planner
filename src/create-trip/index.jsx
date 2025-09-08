@@ -1,23 +1,31 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AI_PROMPT, SelectBudgetList, SelectTravelList } from "@/constants/options";
+import {
+  AI_PROMPT,
+  SelectBudgetList,
+  SelectTravelList,
+} from "@/constants/options";
 import React, { useEffect, useState } from "react";
 import GooglePlacesAutocomplete from "react-google-places-autocomplete";
-import {chatSession} from "@/service/AIModal"
-import { toast } from "sonner"
-import { FcGoogle } from "react-icons/fc"; 
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { chatSession } from "@/service/AIModal";
+import { toast } from "sonner";
+import { FcGoogle } from "react-icons/fc";
 import { useGoogleLogin } from "@react-oauth/google";
-
+// import { GetUserProfile } from "";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader
-} from "@/components/ui/dialog"
+  DialogHeader,
+} from "@/components/ui/dialog";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "@/service/firebaseConfig";
 function CreateTrip() {
   const [place, setPlace] = useState();
   const [formData, setFormData] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
   //---------------------Handle Input-------------------
   const handleInputChange = (name, value) => {
     setFormData({
@@ -30,55 +38,79 @@ function CreateTrip() {
   useEffect(() => {
     console.log(formData);
   }, [formData]);
+  //--------------------useGoogleLogin------------------
+  const login = useGoogleLogin({
+    onSuccess: (codeResp) => GetUserProfile(codeResp),
+    onError: (error) => console.log(error),
+  });
 
-
-const login=useGoogleLogin({
-  onSuccess:(codeResp)=>console.log(codeResp),
-  onError: (error) => console.log(error),
-
-  
-});
-
- //------------------OnGenerateTrip---------------------
-  const OnGenerateTrip =async () => {
-const user = localStorage.getItem("user");
-if(!user){
-  setOpenDialog(true);
-  return;
-}
-    if (formData?.noOfDays>8&&!formData?.location||!formData?.budget||!formData?.traveler) {
-      toast("Please fill all detail.")
+  //------------------OnGenerateTrip---------------------
+  const OnGenerateTrip = async () => {
+    const user = localStorage.getItem("user");
+    if (!user) {
+      setOpenDialog(true);
       return;
     }
-    
-    const  FINAL_PROMPT = AI_PROMPT
-    .replace("{location}",formData?.location?.label)
+    if (
+      (formData?.noOfDays > 8 && !formData?.location) ||
+      !formData?.budget ||
+      !formData?.traveler
+    ) {
+      toast("Please fill all detail.");
+      return;
+    }
+    setLoading(true);
+    const FINAL_PROMPT = AI_PROMPT.replace(
+      "{location}",
+      formData?.location?.label
+    )
       .replace("{noOfDays}", formData?.noOFDays)
       .replace("{traveler}", formData?.traveler)
       .replace("{budget}", formData?.budget)
       .replace("{totalDays}", formData?.noOFDays);
-      console.log(FINAL_PROMPT);
-      const result = await chatSession.sendMessage(FINAL_PROMPT);
-console.log(result?.response?.text());
-
+    // console.log(FINAL_PROMPT);
+    const result = await chatSession.sendMessage(FINAL_PROMPT);
+    console.log("--", result?.response?.text());
+    setLoading(false);
+    SaveAiTrip(result?.response?.text());
   };
-    
-   const GetUserProfile=(tokenInfo)=>{
-    axios.get(`https://www.googleapis.com/oauth2/v1/userinfo?access_token=${tokenInfo?.access_token}`,
-      {
-        headers:{
-          Authorization:`Bearer ${tokenInfo?.access_token}`,
-          Accept:"Application/json"
-        } 
 
-   }).then((resp)=>{
-    console.log(resp);
-    localStorage.setItem("user",JSON.stringify(resp.data));
-    OnGenerateTrip();
-    setOpenDialog(false);
-   })
+  //--------------------Save Trip to Firebase-------------------
+  const SaveAiTrip = async (TripData) => {
+    setLoading(true);
+    const user = JSON.parse(localStorage.getItem("user"));
+    const docId = Date.now().toString();
 
-  }
+    await setDoc(doc(db, "AITrips", docId), {
+      userSelection: formData,
+      tripData: JSON.parse(TripData),
+      userEmail: user?.email,
+      id: docId,
+    });
+
+    setLoading(false);
+    toast("Trip saved successfully!");
+  };
+
+  // ----------------GetUserProfile------------------
+  const GetUserProfile = (tokenInfo) => {
+    axios
+      .get(
+        `https://www.googleapis.com/oauth2/v1/userinfo?acess_token=${tokenInfo?.access_token}`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenInfo?.access_token}`,
+            Accept: "Application/json",
+          },
+        }
+      )
+      .then((resp) => {
+        console.log(resp);
+        localStorage.setItem("user", JSON.stringify(resp.data));
+        setOpenDialog(false);
+        OnGenerateTrip();
+      });
+  };
 
   return (
     <div className="sm:px-10 md:px-32 lg:px-56 xl:px-72 px-5 mt-10">
@@ -89,7 +121,7 @@ console.log(result?.response?.text());
         Just provide some basic information, and our trip planner generates a
         customized itinerary based on your preferences.
       </p>
-      {/* Location Input */}
+      {/*-------------------------- Location Input------------------------------ */}
       <div className="mt-20">
         <div>
           <h2 className="text-xl my-3 font-medium">
@@ -119,7 +151,9 @@ console.log(result?.response?.text());
         </div>
       </div>
 
-      {/* Budget Section */}
+      {/* -------------------------------------------------------------------------------------------------------------- */}
+
+      {/* -------------------------Budget Section---------------------- */}
       <div>
         <h2 className="text-xl my-3 font-medium">What is Your budget?</h2>
         <div className="grid grid-cols-3 gap-5 mt-5">
@@ -138,6 +172,8 @@ console.log(result?.response?.text());
           ))}
         </div>
       </div>
+
+      {/* -------------------------------------------------------------------------------------------------------------- */}
 
       {/* Travel With Section */}
       <div>
@@ -160,10 +196,24 @@ console.log(result?.response?.text());
           ))}
         </div>
       </div>
+      {/* -------------------------------------------------------------------------------------------------------------- */}
+
+      {/* ---------------On-Generate-Trip-Butten--------------- */}
       <div className="my-10 justify-end flex">
-        {/* s---------------On-Generate-Trip-Butten--------------- */}
-        <Button onClick={OnGenerateTrip} className=" text-gray-900 ">Generate Trip</Button>
+        <Button
+          disabled={loading}
+          onClick={OnGenerateTrip}
+          className=" text-gray-900 "
+        >
+          {loading ? (
+            <AiOutlineLoading3Quarters className="h-7 w-7 animate-spin" />
+          ) : (
+            "Generate Trip"
+          )}
+        </Button>
       </div>
+
+      {/* -------------------------------------------------------------------------------------------------------------- */}
 
       {/* ----------Dialog for Google Login---------- */}
       <Dialog open={openDialog}>
@@ -172,13 +222,19 @@ console.log(result?.response?.text());
             <DialogDescription>
               <img src="/logo.svg" />
               <h2 className="font-bold text-lg mt-7">Sign in with Google</h2>
-              <p className="mt-3">Sign in to the app with Google authentication securely</p>
-               <Button onClick={login} className="text-gray-900 w-full mt-5 flex gap-4 items-center">
-                <FcGoogle className="h-10 w-10" /> Sign in with Google</Button>
+              <p className="mt-3">
+                Sign in to the app with Google authentication securely
+              </p>
+              <Button
+                onClick={login}
+                className="text-gray-900 w-full mt-5 flex gap-4 items-center"
+              >
+                <FcGoogle className="h-15 w-15" /> Sign in with Google
+              </Button>
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
-      </Dialog> 
+      </Dialog>
     </div>
   );
 }
