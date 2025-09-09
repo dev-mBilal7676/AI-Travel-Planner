@@ -6,13 +6,13 @@ import {
   SelectTravelList,
 } from "@/constants/options";
 import React, { useEffect, useState } from "react";
-import GooglePlacesAutocomplete from "react-google-places-autocomplete";
+// import GooglePlacesAutocomplete from "react-google-places-autocomplete";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { chatSession } from "@/service/AIModal";
 import { toast } from "sonner";
 import { FcGoogle } from "react-icons/fc";
 import { useGoogleLogin } from "@react-oauth/google";
-// import { GetUserProfile } from "";
+
 import {
   Dialog,
   DialogContent,
@@ -21,11 +21,15 @@ import {
 } from "@/components/ui/dialog";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/service/firebaseConfig";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
 function CreateTrip() {
   const [place, setPlace] = useState();
   const [formData, setFormData] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   //---------------------Handle Input-------------------
   const handleInputChange = (name, value) => {
     setFormData({
@@ -44,72 +48,77 @@ function CreateTrip() {
     onError: (error) => console.log(error),
   });
 
-  //------------------OnGenerateTrip---------------------
+  // ------------------OnGenerateTrip---------------------
   const OnGenerateTrip = async () => {
     const user = localStorage.getItem("user");
     if (!user) {
       setOpenDialog(true);
       return;
     }
+
+    // ✅ Validation works now
     if (
       (formData?.noOfDays > 8 && !formData?.location) ||
       !formData?.budget ||
       !formData?.traveler
     ) {
-      toast("Please fill all detail.");
+      toast.error("⚠️ Please fill all details.");
       return;
     }
+
     setLoading(true);
-    const FINAL_PROMPT = AI_PROMPT.replace(
-      "{location}",
-      formData?.location?.label
-    )
-      .replace("{noOfDays}", formData?.noOFDays)
+
+    const FINAL_PROMPT = AI_PROMPT.replace("{location}", formData?.location)
+      .replace("{noOfDays}", formData?.noOfDays)
       .replace("{traveler}", formData?.traveler)
       .replace("{budget}", formData?.budget)
-      .replace("{totalDays}", formData?.noOFDays);
-    // console.log(FINAL_PROMPT);
+      .replace("{totalDays}", formData?.noOfDays);
+
     const result = await chatSession.sendMessage(FINAL_PROMPT);
-    console.log("--", result?.response?.text());
     setLoading(false);
     SaveAiTrip(result?.response?.text());
   };
 
-  //--------------------Save Trip to Firebase-------------------
+  // --------------------Save Trip to Firebase-------------------
   const SaveAiTrip = async (TripData) => {
     setLoading(true);
     const user = JSON.parse(localStorage.getItem("user"));
     const docId = Date.now().toString();
-
+    let parsedTrip = {};
+    try {
+      parsedTrip = JSON.parse(TripData);
+    } catch (e) {
+      parsedTrip = { raw: TripData };
+    }
     await setDoc(doc(db, "AITrips", docId), {
       userSelection: formData,
-      tripData: JSON.parse(TripData),
+      tripData: parsedTrip,
       userEmail: user?.email,
       id: docId,
     });
-
     setLoading(false);
-    toast("Trip saved successfully!");
+    toast.success("Trip saved successfully!");
+    navigate("/view-trip/" + docId);
   };
 
   // ----------------GetUserProfile------------------
   const GetUserProfile = (tokenInfo) => {
     axios
       .get(
-        `https://www.googleapis.com/oauth2/v1/userinfo?acess_token=${tokenInfo?.access_token}`,
+        `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${tokenInfo?.access_token}`,
         {
           headers: {
             Authorization: `Bearer ${tokenInfo?.access_token}`,
-            Accept: "Application/json",
+            Accept: "application/json",
           },
         }
       )
       .then((resp) => {
-        console.log(resp);
         localStorage.setItem("user", JSON.stringify(resp.data));
         setOpenDialog(false);
         OnGenerateTrip();
-      });
+      })
+      .catch((err) => console.error("Google profile fetch error:", err));
   };
 
   return (
@@ -127,7 +136,12 @@ function CreateTrip() {
           <h2 className="text-xl my-3 font-medium">
             What is destination of choice?
           </h2>
-          <GooglePlacesAutocomplete
+          <Input
+            placeholder={"Location"}
+            type="text"
+            onChange={(e) => handleInputChange("location", e.target.value)}
+          />
+          {/* <GooglePlacesAutocomplete
             apiKey={import.meta.env.VITE_GOOGLE_PLACE_API_KEY}
             selectProps={{
               place,
@@ -136,7 +150,7 @@ function CreateTrip() {
                 handleInputChange("location", v);
               },
             }}
-          />
+          /> */}
         </div>
         {/* Number of Days */}
         <div className="mt-10 flex flex-col gap-10">
@@ -240,3 +254,69 @@ function CreateTrip() {
 }
 
 export default CreateTrip;
+
+// //--------------------Save Trip to Firebase-------------------
+// const SaveAiTrip = async (TripData) => {
+//   setLoading(true);
+//   const user = JSON.parse(localStorage.getItem("user"));
+//   const docId = Date.now().toString();
+//   await setDoc(doc(db, "AITrips", docId), {
+//     userSelection: formData,
+//     tripData: JSON.parse(TripData),
+//     userEmail: user?.email,
+//     id: docId,
+//   });
+//   setLoading(false);
+//   navigate("/view-trip/" + docId);
+//   // toast("Trip saved successfully!");
+// };
+// // ----------------GetUserProfile------------------
+// const GetUserProfile = (tokenInfo) => {
+//   axios
+//     .get(
+//       `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${tokenInfo?.access_token}`,
+//       {
+//         headers: {
+//           Authorization: `Bearer ${tokenInfo?.access_token}`,
+//           Accept: "Application/json",
+//         },
+//       }
+//     )
+//     .then((resp) => {
+//       console.log(resp);
+//       localStorage.setItem("user", JSON.stringify(resp.data));
+//       setOpenDialog(false);
+//       OnGenerateTrip();
+//     });
+// };
+
+// //------------------OnGenerateTrip---------------------
+// const OnGenerateTrip = async () => {
+//   const user = localStorage.getItem("user");
+//   if (!user) {
+//     setOpenDialog(true);
+//     return;
+//   }
+//   if (
+//     (formData?.noOfDays > 8 && !formData?.location) ||
+//     !formData?.budget ||
+//     !formData?.traveler
+//   ) {
+//     toast("Please fill all detail.");
+//     return;
+//   }
+//   setLoading(true);
+//   const FINAL_PROMPT = AI_PROMPT.replace(
+//     "{location}",
+//     formData?.location?.label
+//   )
+//     .replace("{noOfDays}", formData?.noOfDays)
+//     .replace("{traveler}", formData?.traveler)
+//     .replace("{budget}", formData?.budget)
+//     .replace("{totalDays}", formData?.noOfDays);
+//   // console.log(FINAL_PROMPT);
+//   const result = await chatSession.sendMessage(FINAL_PROMPT);
+//   console.log("--", result?.response?.text());
+//   setLoading(false);
+//   SaveAiTrip(result?.response?.text());
+// };
