@@ -6,8 +6,8 @@ function InfoSection({ trip }) {
   return (
     <div>
       <img
-        className="h-[800px] w-full object-cover rounded-xl"
-        src="\public\image\images.jpg"
+        className="h-full w-full object-cover rounded-xl"
+        src="\public\image\pexels-nurseryart-346885.jpg"
       />
       <div className="flex justify-between items-center">
         <div className="my-5 flex flex-col gap-2">

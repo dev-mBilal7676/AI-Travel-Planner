@@ -5,6 +5,8 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import InfoSection from "../components/infoSection";
 import Hotels from "../components/Hotels";
+import PlaceToVisit from "../components/PlaceToVisit";
+import Footer from "../components/Footer";
 function ViewTrip() {
   const { tripId } = useParams();
   const [trip, setTrip] = useState([]);
@@ -29,10 +31,11 @@ function ViewTrip() {
       {/* Recommended Hotels */}
       <Hotels trip={trip} />
       {/* Daily Plan */}
-
+      <PlaceToVisit trip={trip} />
       {/* Footer */}
+      <Footer trip={trip} />
     </div>
-  )
+  );
 }
 
 export default ViewTrip;
